@@ -81,4 +81,7 @@ dkms.conf
 .gcc-flags.json
 .pio
 
+# Local secrets
+include/secrets.h
+
 # End of https://www.toptal.com/developers/gitignore/api/c,c++,platformio
