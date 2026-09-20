@@ -71,7 +71,7 @@ constexpr unsigned long mqtt_reconnect_retry_ms = 5000;   // Intervalo entre ten
 constexpr unsigned long wifi_reconnect_retry_ms = 10000;  // Intervalo entre tentativas de reconexão Wi-Fi (10s)
 constexpr unsigned long wifi_connect_timeout_ms = 10000;  // Timeout de conexão Wi-Fi inicial (10s)
 constexpr uint8_t telemetry_temp_decimals = 2;            // Casas decimais da temperatura na serial
-constexpr size_t json_payload_buffer_size = 192;          // Buffer fixo na pilha (evita fragmentação de Heap)
+constexpr size_t json_payload_buffer_size = 256;          // Buffer fixo na pilha (evita fragmentação de Heap)
 
 // Estados operacionais da leitura de temperatura
 enum class SensorReadStatus : uint8_t {
