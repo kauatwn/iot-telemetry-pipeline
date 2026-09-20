@@ -38,6 +38,8 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
+#include "secrets.h"
+
 namespace {
 // Mapeamento de pinos do hardware
 constexpr uint8_t pin_one_wire_bus = 14;  // Entrada digital: sensor de temperatura DS18B20 (barramento 1-Wire)
@@ -47,15 +49,13 @@ constexpr float ds18b20_min_temp_c = -55.0F;                       // Limite mí
 constexpr float ds18b20_max_temp_c = 125.0F;                       // Limite máximo de temperatura
 constexpr float ds18b20_disconnect_value = DEVICE_DISCONNECTED_C;  // Leitura com sensor desconectado (-127.0 °C)
 
-// Configurações de rede Wi-Fi
-constexpr auto wifi_ssid = "Wokwi-GUEST";
-constexpr auto wifi_password = "";
-
-// Configurações do broker MQTT (HiveMQ Cloud)
-constexpr auto mqtt_broker_host = "SEU_CLUSTER.s1.eu.hiveMQ.cloud";
-constexpr uint16_t mqtt_broker_port = 8883;
-constexpr auto mqtt_username = "SEU_USUARIO";
-constexpr auto mqtt_password = "SUA_SENHA";
+// Configurações de rede Wi-Fi e broker MQTT (carregadas de include/secrets.h)
+constexpr auto wifi_ssid = default_wifi_ssid;
+constexpr auto wifi_password = default_wifi_password;
+constexpr auto mqtt_broker_host = default_mqtt_broker_host;
+constexpr uint16_t mqtt_broker_port = default_mqtt_broker_port;
+constexpr auto mqtt_username = default_mqtt_username;
+constexpr auto mqtt_password = default_mqtt_password;
 constexpr auto mqtt_client_id = "esp32_sensor_device_01";
 constexpr auto mqtt_topic_telemetry = "telemetry/temperature";
 
@@ -66,10 +66,12 @@ constexpr auto telemetry_unit = "celsius";
 
 // Temporizações e comunicação serial
 constexpr unsigned long serial_baud_rate = 115200;        // Velocidade da porta serial (115200 bps)
-constexpr unsigned long telemetry_interval_ms = 2000;     // Intervalo de transmissão da telemetria (2 segundos)
-constexpr unsigned long mqtt_reconnect_retry_ms = 5000;   // Intervalo entre tentativas de reconexão MQTT (5 segundos)
-constexpr unsigned long wifi_connect_timeout_ms = 10000;  // Timeout de conexão Wi-Fi (10 segundos)
+constexpr unsigned long telemetry_interval_ms = 2000;     // Intervalo de transmissão da telemetria (2s)
+constexpr unsigned long mqtt_reconnect_retry_ms = 5000;   // Intervalo entre tentativas de reconexão MQTT (5s)
+constexpr unsigned long wifi_reconnect_retry_ms = 10000;  // Intervalo entre tentativas de reconexão Wi-Fi (10s)
+constexpr unsigned long wifi_connect_timeout_ms = 10000;  // Timeout de conexão Wi-Fi inicial (10s)
 constexpr uint8_t telemetry_temp_decimals = 2;            // Casas decimais da temperatura na serial
+constexpr size_t json_payload_buffer_size = 192;          // Buffer fixo na pilha (evita fragmentação de Heap)
 
 // Estados operacionais da leitura de temperatura
 enum class SensorReadStatus : uint8_t {
@@ -94,6 +96,7 @@ PubSubClient mqtt_client(secure_wifi_client);
 // Variáveis de estado global do sistema
 unsigned long last_telemetry_ms = 0;
 unsigned long last_mqtt_reconnect_attempt_ms = 0;
+unsigned long last_wifi_reconnect_attempt_ms = 0;
 
 // Retorna o rótulo textual do status do sensor
 const __FlashStringHelper* get_sensor_status_name(const SensorReadStatus status) {
@@ -108,7 +111,7 @@ const __FlashStringHelper* get_sensor_status_name(const SensorReadStatus status)
   return F("UNKNOWN");
 }
 
-// Inicialização e conexão com a rede Wi-Fi
+// Inicialização e conexão inicial com a rede Wi-Fi
 void setup_wifi() {
   Serial.println();
   Serial.print(F("[WIFI] Conectando a rede: "));
@@ -118,7 +121,7 @@ void setup_wifi() {
   WiFi.begin(wifi_ssid, wifi_password);
 
   const unsigned long start_attempt_time = millis();
-  while (WiFiClass::status() != WL_CONNECTED && (millis() - start_attempt_time) < wifi_connect_timeout_ms) {
+  while (WiFiClass::status() != WL_CONNECTED && millis() - start_attempt_time < wifi_connect_timeout_ms) {
     delay(250);
     Serial.print('.');
   }
@@ -130,6 +133,20 @@ void setup_wifi() {
   } else {
     Serial.println();
     Serial.println(F("[WIFI] Falha na conexão inicial (timeout). O sistema continuará tentando no loop."));
+  }
+}
+
+// Reconexão periódica resiliente de Wi-Fi sem bloquear a execução principal
+void maintain_wifi_connection(const unsigned long current_ms) {
+  if (WiFiClass::status() == WL_CONNECTED) {
+    return;
+  }
+
+  if (current_ms - last_wifi_reconnect_attempt_ms >= wifi_reconnect_retry_ms) {
+    last_wifi_reconnect_attempt_ms = current_ms;
+    Serial.println(F("[WIFI] Conexão perdida. Tentando reconectar ao Wi-Fi..."));
+    WiFi.disconnect();
+    WiFi.reconnect();
   }
 }
 
@@ -167,10 +184,10 @@ void maintain_mqtt_connection(const unsigned long current_ms) {
   }
 }
 
-// Leitura da temperatura com validação do sensor DS18B20
+// Leitura da temperatura com amostragem assíncrona não-bloqueante
 float read_temperature_celsius(SensorReadStatus& status) {
-  dallas_sensor.requestTemperatures();
   const float temp_c = dallas_sensor.getTempCByIndex(0);
+  dallas_sensor.requestTemperatures();  // Dispara assincronamente a próxima conversão
 
   if (temp_c == ds18b20_disconnect_value) {
     status = SensorReadStatus::Disconnected;
@@ -186,8 +203,8 @@ float read_temperature_celsius(SensorReadStatus& status) {
   return temp_c;
 }
 
-// Serializa os dados de telemetria em formato JSON
-String serialize_telemetry_json(const TemperatureTelemetry& telemetry) {
+// Serializa os dados de telemetria em buffer estático (zero alocação dinâmica / sem fragmentação de Heap)
+bool serialize_telemetry_json(const TemperatureTelemetry& telemetry, char* buffer, const size_t max_len) {
   JsonDocument doc;
 
   doc["device_id"] = telemetry_device_id;
@@ -203,21 +220,20 @@ String serialize_telemetry_json(const TemperatureTelemetry& telemetry) {
   doc["uptime_ms"] = telemetry.timestamp_ms;
   doc["status"] = get_sensor_status_name(telemetry.status);
 
-  String json_payload;
-  serializeJson(doc, json_payload);
-  return json_payload;
+  const size_t bytes_written = serializeJson(doc, buffer, max_len);
+  return bytes_written > 0 && bytes_written < max_len;
 }
 
 // Publica a mensagem de telemetria no tópico MQTT
-bool publish_telemetry(const String& payload) {
+bool publish_telemetry(const char* payload) {
   if (!mqtt_client.connected()) {
     return false;
   }
-  return mqtt_client.publish(mqtt_topic_telemetry, payload.c_str());
+  return mqtt_client.publish(mqtt_topic_telemetry, payload);
 }
 
 // Exibe os dados de telemetria no Monitor Serial
-void print_telemetry_serial(const TemperatureTelemetry& telemetry, const String& payload, const bool published) {
+void print_telemetry_serial(const TemperatureTelemetry& telemetry, const char* payload, const bool published) {
   Serial.print(F("[TELEMETRIA] "));
   if (telemetry.status == SensorReadStatus::Success) {
     Serial.print(F("Temp: "));
@@ -245,8 +261,10 @@ void setup() {
   Serial.println(F(" Status: Inicializado com Sucesso                "));
   Serial.println(F("=================================================="));
 
-  // Inicialização do barramento 1-Wire e sensor DS18B20
+  // Inicialização do barramento 1-Wire e sensor DS18B20 em modo não-bloqueante
   dallas_sensor.begin();
+  dallas_sensor.setWaitForConversion(false);  // Desativa espera de 750ms bloqueante
+  dallas_sensor.requestTemperatures();        // Dispara a primeira amostragem
   Serial.print(F("[HARDWARE] Dispositivos 1-Wire encontrados: "));
   Serial.println(dallas_sensor.getDeviceCount());
 
@@ -266,7 +284,8 @@ void setup() {
 void loop() {
   const unsigned long current_ms = millis();
 
-  // Gerencia a conexão com o broker MQTT
+  // Gerencia a resiliência das conexões de rede de forma não-bloqueante
+  maintain_wifi_connection(current_ms);
   maintain_mqtt_connection(current_ms);
 
   // Processa a fila de mensagens MQTT
@@ -289,13 +308,16 @@ void loop() {
         .timestamp_ms = current_ms,
     };
 
-    // Serialização do pacote em JSON
-    const String json_payload = serialize_telemetry_json(telemetry);
+    // Serialização do pacote em buffer estático na pilha
+    char json_payload[json_payload_buffer_size];
+    if (serialize_telemetry_json(telemetry, json_payload, sizeof(json_payload))) {
+      // Publicação no broker MQTT
+      const bool published = publish_telemetry(json_payload);
 
-    // Publicação no broker MQTT
-    const bool published = publish_telemetry(json_payload);
-
-    // Exibição dos dados no Monitor Serial
-    print_telemetry_serial(telemetry, json_payload, published);
+      // Exibição dos dados no Monitor Serial
+      print_telemetry_serial(telemetry, json_payload, published);
+    } else {
+      Serial.println(F("[ERRO] Falha na serialização do JSON: buffer estático insuficiente."));
+    }
   }
 }
