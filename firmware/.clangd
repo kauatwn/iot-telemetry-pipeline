@@ -1,0 +1,15 @@
+CompileFlags:
+  Add:
+    - --target=x86_64-unknown-linux-gnu
+    - -Wno-unknown-attributes
+    - -Wno-unknown-warning-option
+    - -Wno-unused-command-line-argument
+    - -Wno-unsafe-buffer-usage
+Diagnostics:
+  Suppress:
+    - "-Wunknown-attributes"
+    - "unknown_attribute_ignored"
+    - "attribute_section_invalid_for_target"
+    - "-Wunsafe-buffer-usage"
+    - "cert-err58-cpp"
+    - "cppcoreguidelines-pro-bounds-constant-array-index"
