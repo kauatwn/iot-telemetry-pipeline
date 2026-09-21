@@ -36,7 +36,7 @@ func NewInfluxDB(cfg config.StorageConfig) (*InfluxDB, error) {
 }
 
 func (db *InfluxDB) Save(ctx context.Context, p telemetry.Payload) error {
-	point := influxdb3.NewPointWithMeasurement("sensor_ambiente").
+	point := influxdb3.NewPointWithMeasurement("environment_sensor").
 		SetTag("device_id", p.DeviceID).
 		SetTag("sensor_model", p.Sensor).
 		SetTag("status", p.Status).
@@ -52,7 +52,7 @@ func (db *InfluxDB) Save(ctx context.Context, p telemetry.Payload) error {
 	}
 
 	if p.HasTemperature() {
-		point.SetDoubleField("temperatura", *p.Temperature)
+		point.SetDoubleField("temperature", *p.Temperature)
 	}
 
 	if err := db.client.WritePoints(ctx, []*influxdb3.Point{point}); err != nil {
