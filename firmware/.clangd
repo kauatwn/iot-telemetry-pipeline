@@ -11,5 +11,4 @@ Diagnostics:
     - "unknown_attribute_ignored"
     - "attribute_section_invalid_for_target"
     - "-Wunsafe-buffer-usage"
-    - "cert-err58-cpp"
     - "cppcoreguidelines-pro-bounds-constant-array-index"
