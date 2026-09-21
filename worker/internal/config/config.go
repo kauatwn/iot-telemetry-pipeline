@@ -1,17 +1,19 @@
 package config
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
-	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
 	Storage StorageConfig
 	Broker  BrokerConfig
+	Log     LogConfig
 }
 
 type StorageConfig struct {
@@ -28,35 +30,16 @@ type BrokerConfig struct {
 	Topic    string
 }
 
-// loadDotEnv lê um arquivo .env e injeta as variáveis no ambiente do processo caso ainda não existam.
-func loadDotEnv(filepath string) {
-	f, err := os.Open(filepath)
-	if err != nil {
-		return // Arquivo .env é opcional em ambientes de produção/container
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-		val = strings.Trim(val, `"'`)
-		if _, exists := os.LookupEnv(key); !exists {
-			_ = os.Setenv(key, val)
-		}
-	}
+type LogConfig struct {
+	Level  string
+	Format string
 }
 
 func Load() (*Config, error) {
-	loadDotEnv(".env")
+	// Carrega o arquivo .env (opcional em ambientes de produção/contêineres)
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("failed to load .env file", "error", err)
+	}
 
 	clientID := os.Getenv("MQTT_CLIENT_ID")
 	if clientID == "" {
@@ -66,6 +49,16 @@ func Load() (*Config, error) {
 	topic := os.Getenv("MQTT_TOPIC")
 	if topic == "" {
 		topic = "telemetry/temperature"
+	}
+
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "INFO"
+	}
+
+	logFormat := os.Getenv("LOG_FORMAT")
+	if logFormat == "" {
+		logFormat = "text"
 	}
 
 	cfg := &Config{
@@ -80,6 +73,10 @@ func Load() (*Config, error) {
 			Password: os.Getenv("MQTT_PASSWORD"),
 			ClientID: clientID,
 			Topic:    topic,
+		},
+		Log: LogConfig{
+			Level:  logLevel,
+			Format: logFormat,
 		},
 	}
 
