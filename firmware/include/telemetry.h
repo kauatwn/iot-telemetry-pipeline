@@ -1,8 +1,6 @@
 #pragma once
 
 #include <Arduino.h>
-#include <stddef.h>
-#include <stdint.h>
 
 enum class SensorReadStatus : uint8_t {
   Success,
