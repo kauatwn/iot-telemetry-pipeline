@@ -10,11 +10,19 @@ constexpr float ds18b20_min_temp_c = -55.0F;
 constexpr float ds18b20_max_temp_c = 125.0F;
 constexpr float ds18b20_disconnect_value = DEVICE_DISCONNECTED_C;
 
-OneWire one_wire_bus(pin_one_wire_bus);
-DallasTemperature dallas_sensor(&one_wire_bus);
+OneWire& get_one_wire() {
+  static OneWire bus(pin_one_wire_bus);
+  return bus;
+}
+
+DallasTemperature& get_dallas_sensor() {
+  static DallasTemperature sensor(&get_one_wire());
+  return sensor;
+}
 }  // namespace
 
 void sensor_init() {
+  auto& dallas_sensor = get_dallas_sensor();
   dallas_sensor.begin();
   dallas_sensor.setWaitForConversion(false);
   dallas_sensor.requestTemperatures();
@@ -23,6 +31,7 @@ void sensor_init() {
 }
 
 float sensor_read_celsius(SensorReadStatus& status) {
+  auto& dallas_sensor = get_dallas_sensor();
   const float temp_c = dallas_sensor.getTempCByIndex(0);
   dallas_sensor.requestTemperatures();
 
