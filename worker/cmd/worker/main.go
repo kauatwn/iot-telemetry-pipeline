@@ -16,9 +16,14 @@ import (
 	"worker/internal/telemetry"
 )
 
-func setupLogger() {
+const (
+	writeTimeout       = 5 * time.Second
+	telemetryQueueSize = 100
+)
+
+func setupLogger(cfg config.LogConfig) {
 	var level slog.Level
-	switch strings.ToUpper(os.Getenv("LOG_LEVEL")) {
+	switch strings.ToUpper(cfg.Level) {
 	case "DEBUG":
 		level = slog.LevelDebug
 	case "WARN":
@@ -34,7 +39,7 @@ func setupLogger() {
 	}
 
 	var handler slog.Handler
-	if strings.ToLower(os.Getenv("LOG_FORMAT")) == "json" {
+	if strings.ToLower(cfg.Format) == "json" {
 		handler = slog.NewJSONHandler(os.Stdout, opts)
 	} else {
 		handler = slog.NewTextHandler(os.Stdout, opts)
@@ -43,14 +48,53 @@ func setupLogger() {
 	slog.SetDefault(slog.New(handler))
 }
 
-func main() {
-	setupLogger()
+// processTelemetry consome as mensagens da esteira e persiste no storage com controle de timeout.
+func processTelemetry(db storage.Writer, payloadChan <-chan telemetry.Payload) {
+	slog.Info("waiting for telemetry messages in pipeline...")
+	for payload := range payloadChan {
+		logTelemetry(payload)
 
+		writeCtx, cancel := context.WithTimeout(context.Background(), writeTimeout)
+		if err := db.Save(writeCtx, payload); err != nil {
+			slog.Error("failed to save telemetry to InfluxDB",
+				"error", err,
+				"device_id", payload.DeviceID,
+			)
+		}
+		cancel()
+	}
+	slog.Info("consumer goroutine finished draining channel")
+}
+
+// logTelemetry emite o log estruturado da telemetria recebida de acordo com a integridade física do sensor.
+func logTelemetry(p telemetry.Payload) {
+	if p.HasTemperature() {
+		slog.Info("processing telemetry",
+			"device_id", p.DeviceID,
+			"sensor", p.Sensor,
+			"temperature", *p.Temperature,
+			"unit", p.Unit,
+			"status", p.Status,
+		)
+		return
+	}
+
+	slog.Warn("processing telemetry (sensor disconnected)",
+		"device_id", p.DeviceID,
+		"sensor", p.Sensor,
+		"unit", p.Unit,
+		"status", p.Status,
+	)
+}
+
+func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		slog.Error("falha ao carregar configuração", "error", err)
+		slog.Error("failed to load configuration", "error", err)
 		os.Exit(1)
 	}
+
+	setupLogger(cfg.Log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -58,50 +102,22 @@ func main() {
 	var db storage.Writer
 	db, err = storage.NewInfluxDB(cfg.Storage)
 	if err != nil {
-		slog.Error("erro ao conectar no InfluxDB", "error", err)
+		slog.Error("failed to connect to InfluxDB", "error", err)
 		os.Exit(1)
 	}
 
-	payloadChan := make(chan telemetry.Payload, 100)
+	payloadChan := make(chan telemetry.Payload, telemetryQueueSize)
 
 	mqttBroker, err := broker.NewMQTTBroker(cfg.Broker, payloadChan)
 	if err != nil {
 		_ = db.Close()
-		slog.Error("erro ao conectar no MQTT", "error", err)
+		slog.Error("failed to connect to MQTT", "error", err)
 		os.Exit(1)
 	}
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		slog.Info("aguardando mensagens de telemetria na esteira...")
-		for payload := range payloadChan {
-			if payload.HasTemperature() {
-				slog.Info("processando telemetria",
-					"device_id", payload.DeviceID,
-					"sensor", payload.Sensor,
-					"temperatura", *payload.Temperature,
-					"unit", payload.Unit,
-					"status", payload.Status,
-				)
-			} else {
-				slog.Warn("processando telemetria (sensor desconectado)",
-					"device_id", payload.DeviceID,
-					"sensor", payload.Sensor,
-					"unit", payload.Unit,
-					"status", payload.Status,
-				)
-			}
-
-			writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if err := db.Save(writeCtx, payload); err != nil {
-				slog.Error("falha ao salvar telemetria no InfluxDB",
-					"error", err,
-					"device_id", payload.DeviceID,
-				)
-			}
-			cancel()
-		}
-		slog.Info("goroutine consumidora finalizou a drenagem do canal")
+		processTelemetry(db, payloadChan)
 	})
 
 	if err := mqttBroker.StartSubscription(cfg.Broker.Topic); err != nil {
@@ -109,17 +125,17 @@ func main() {
 		close(payloadChan)
 		wg.Wait()
 		_ = db.Close()
-		slog.Error("erro ao assinar o tópico MQTT", "topic", cfg.Broker.Topic, "error", err)
+		slog.Error("failed to subscribe to MQTT topic", "topic", cfg.Broker.Topic, "error", err)
 		os.Exit(1)
 	}
-	slog.Info("worker escutando tópico MQTT", "topic", cfg.Broker.Topic, "client_id", cfg.Broker.ClientID)
+	slog.Info("worker listening to MQTT topic", "topic", cfg.Broker.Topic, "client_id", cfg.Broker.ClientID)
 
 	<-ctx.Done()
-	slog.Info("sinal de encerramento recebido, iniciando shutdown gracioso...")
+	slog.Info("shutdown signal received, starting graceful shutdown...")
 
 	// 1. Desconectar o broker MQTT (para recebimento de novas mensagens)
 	mqttBroker.Disconnect()
-	slog.Info("MQTT desconectado")
+	slog.Info("MQTT disconnected")
 
 	// 2. Fechar o canal para sinalizar à goroutine para drenar as mensagens restantes
 	close(payloadChan)
@@ -129,10 +145,10 @@ func main() {
 
 	// 4. Fechar conexão com InfluxDB com segurança
 	if err := db.Close(); err != nil {
-		slog.Error("erro ao fechar conexão com InfluxDB", "error", err)
+		slog.Error("failed to close InfluxDB connection", "error", err)
 	} else {
-		slog.Info("conexão com InfluxDB encerrada com sucesso")
+		slog.Info("InfluxDB connection closed successfully")
 	}
 
-	slog.Info("worker encerrado com segurança")
+	slog.Info("worker shut down safely")
 }
