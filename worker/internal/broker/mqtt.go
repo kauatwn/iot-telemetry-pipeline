@@ -52,18 +52,18 @@ func NewMQTTBroker(cfg config.BrokerConfig, outChan chan<- telemetry.Payload) (*
 		broker.mu.RUnlock()
 
 		if currentTopic != "" {
-			slog.Info("conexão MQTT estabelecida", "topic", currentTopic)
+			slog.Info("MQTT connection established", "topic", currentTopic)
 			token := c.Subscribe(currentTopic, 0, broker.messageHandler())
 			if token.Wait() && token.Error() != nil {
-				slog.Error("falha ao assinar tópico na reconexão MQTT", "topic", currentTopic, "error", token.Error())
+				slog.Error("failed to subscribe to topic on MQTT reconnect", "topic", currentTopic, "error", token.Error())
 			}
 		} else {
-			slog.Info("conexão MQTT estabelecida com sucesso")
+			slog.Info("MQTT connection established successfully")
 		}
 	})
 
 	opts.SetConnectionLostHandler(func(c mqtt.Client, err error) {
-		slog.Warn("conexão com broker MQTT perdida; tentando reconectar...", "error", err)
+		slog.Warn("MQTT connection lost; attempting to reconnect...", "error", err)
 	})
 
 	client := mqtt.NewClient(opts)
@@ -92,12 +92,12 @@ func (b *MQTTBroker) messageHandler() mqtt.MessageHandler {
 	return func(client mqtt.Client, msg mqtt.Message) {
 		var payload telemetry.Payload
 		if err := json.Unmarshal(msg.Payload(), &payload); err != nil {
-			slog.Error("erro ao decodificar JSON de telemetria", "error", err)
+			slog.Error("failed to decode telemetry JSON", "error", err)
 			return
 		}
 
 		if !payload.HasTemperature() {
-			slog.Warn("telemetria recebida sem temperatura (sensor desconectado)",
+			slog.Warn("telemetry received without temperature (sensor disconnected)",
 				"device_id", payload.DeviceID,
 				"status", payload.Status,
 			)
@@ -106,7 +106,7 @@ func (b *MQTTBroker) messageHandler() mqtt.MessageHandler {
 		select {
 		case b.out <- payload:
 		default:
-			slog.Warn("buffer de telemetria lotado; mensagem descartada",
+			slog.Warn("telemetry buffer full; message dropped",
 				"device_id", payload.DeviceID,
 			)
 		}
