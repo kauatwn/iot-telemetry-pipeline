@@ -21,8 +21,15 @@ constexpr unsigned long mqtt_reconnect_retry_ms = 5000;
 constexpr unsigned long wifi_reconnect_retry_ms = 10000;
 constexpr unsigned long wifi_connect_timeout_ms = 10000;
 
-WiFiClientSecure secure_wifi_client;
-PubSubClient mqtt_client(secure_wifi_client);
+WiFiClientSecure& get_secure_wifi_client() {
+  static WiFiClientSecure client;
+  return client;
+}
+
+PubSubClient& get_mqtt_client() {
+  static PubSubClient client(get_secure_wifi_client());
+  return client;
+}
 
 unsigned long last_mqtt_reconnect_attempt_ms = 0;
 unsigned long last_wifi_reconnect_attempt_ms = 0;
@@ -65,6 +72,8 @@ void maintain_wifi_connection(const unsigned long current_ms) {
 }
 
 bool connect_to_mqtt() {
+  auto& mqtt_client = get_mqtt_client();
+
   Serial.print(F("[MQTT] Connecting to HiveMQ Cloud ("));
   Serial.print(mqtt_broker_host);
   Serial.print(':');
@@ -86,6 +95,7 @@ void maintain_mqtt_connection(const unsigned long current_ms) {
     return;
   }
 
+  auto& mqtt_client = get_mqtt_client();
   if (mqtt_client.connected()) {
     return;
   }
@@ -98,8 +108,8 @@ void maintain_mqtt_connection(const unsigned long current_ms) {
 }  // namespace
 
 void network_init() {
-  secure_wifi_client.setInsecure();
-  mqtt_client.setServer(mqtt_broker_host, mqtt_broker_port);
+  get_secure_wifi_client().setInsecure();
+  get_mqtt_client().setServer(mqtt_broker_host, mqtt_broker_port);
   setup_wifi();
 }
 
@@ -109,12 +119,14 @@ void network_maintain(const unsigned long current_ms) {
 }
 
 void network_loop() {
+  auto& mqtt_client = get_mqtt_client();
   if (mqtt_client.connected()) {
     mqtt_client.loop();
   }
 }
 
 bool network_publish(const char* payload) {
+  auto& mqtt_client = get_mqtt_client();
   if (!mqtt_client.connected()) {
     return false;
   }
