@@ -1,5 +1,4 @@
-#ifndef SECRETS_EXAMPLE_H
-#define SECRETS_EXAMPLE_H
+#pragma once
 
 #include <cstdint>
 
@@ -15,5 +14,3 @@ constexpr char default_mqtt_broker_host[] = "SEU_CLUSTER.s1.eu.hivemq.cloud";
 constexpr uint16_t default_mqtt_broker_port = 8883;
 constexpr char default_mqtt_username[] = "SEU_USUARIO_HIVEMQ";
 constexpr char default_mqtt_password[] = "SUA_SENHA_HIVEMQ";
-
-#endif  // SECRETS_EXAMPLE_H
