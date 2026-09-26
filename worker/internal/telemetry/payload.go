@@ -8,8 +8,3 @@ type Payload struct {
 	UptimeMs    int64    `json:"uptime_ms"`
 	Status      string   `json:"status"`
 }
-
-// HasTemperature indica se a leitura contém um valor de temperatura válido
-func (p Payload) HasTemperature() bool {
-	return p.Temperature != nil
-}

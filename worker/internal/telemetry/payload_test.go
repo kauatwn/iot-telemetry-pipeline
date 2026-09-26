@@ -23,8 +23,8 @@ func TestPayloadUnmarshal_ValidTemperature(t *testing.T) {
 	if p.DeviceID != "esp32-sensor-01" {
 		t.Errorf("expected device_id 'esp32-sensor-01', got: %q", p.DeviceID)
 	}
-	if !p.HasTemperature() {
-		t.Fatal("expected HasTemperature() to be true, got false")
+	if p.Temperature == nil {
+		t.Fatal("expected Temperature to be non-nil, got nil")
 	}
 	if *p.Temperature != 24.50 {
 		t.Errorf("expected temperature 24.50, got: %f", *p.Temperature)
@@ -52,8 +52,8 @@ func TestPayloadUnmarshal_DisconnectedSensor(t *testing.T) {
 		t.Fatalf("failed to unmarshal JSON: %v", err)
 	}
 
-	if p.HasTemperature() {
-		t.Fatal("expected HasTemperature() to be false for disconnected sensor, got true")
+	if p.Temperature != nil {
+		t.Fatal("expected Temperature to be nil for disconnected sensor, got non-nil")
 	}
 	if p.Status != "DISCONNECTED" {
 		t.Errorf("expected status 'DISCONNECTED', got: %q", p.Status)

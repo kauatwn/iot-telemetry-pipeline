@@ -68,7 +68,7 @@ func processTelemetry(db storage.Writer, payloadChan <-chan telemetry.Payload) {
 
 // logTelemetry emite o log estruturado da telemetria recebida de acordo com a integridade física do sensor.
 func logTelemetry(p telemetry.Payload) {
-	if p.HasTemperature() {
+	if p.Temperature != nil {
 		slog.Info("processing telemetry",
 			"device_id", p.DeviceID,
 			"sensor", p.Sensor,
