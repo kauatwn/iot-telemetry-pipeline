@@ -25,6 +25,10 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: firmware
 
     steps:
       - name: "Checkout code 🛎️"
@@ -53,6 +57,10 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: firmware
 
     steps:
       - name: "Checkout code 🛎️"
@@ -73,7 +81,7 @@ jobs:
             ~/.platformio/.cache
             ~/.platformio/packages
             ~/.platformio/platforms
-          key: ${{ runner.os }}-pio-${{ hashFiles('platformio.ini', 'requirements.txt') }}
+          key: ${{ runner.os }}-pio-${{ hashFiles('firmware/platformio.ini', 'firmware/requirements.txt') }}
           restore-keys: ${{ runner.os }}-pio-
 
       - name: "Install Dependencies 🔧"
@@ -83,12 +91,16 @@ jobs:
         run: pio check --fail-on-defect=low
 
   build:
-    name: "Build Arduino Uno Firmware"
+    name: "Build ESP32 Firmware"
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
     needs: [format, analysis]
+    defaults:
+      run:
+        shell: bash
+        working-directory: firmware
 
     steps:
       - name: "Checkout code 🛎️"
@@ -109,29 +121,29 @@ jobs:
             ~/.platformio/.cache
             ~/.platformio/packages
             ~/.platformio/platforms
-          key: ${{ runner.os }}-pio-${{ hashFiles('platformio.ini', 'requirements.txt') }}
+          key: ${{ runner.os }}-pio-${{ hashFiles('firmware/platformio.ini', 'firmware/requirements.txt') }}
           restore-keys: ${{ runner.os }}-pio-
 
       - name: "Install Dependencies 🔧"
         run: pip install -r requirements.txt
 
-      - name: "Build Arduino Uno Firmware 🔨"
-        run: pio run -e uno
+      - name: "Build ESP32 Firmware 🔨"
+        run: pio run -e esp32dev
 
       - name: "Generate Firmware Integrity Checksums 🔐"
         run: |
-          cd .pio/build/uno
-          sha256sum firmware.hex firmware.elf > SHA256SUMS
+          cd .pio/build/esp32dev
+          sha256sum firmware.bin firmware.elf > SHA256SUMS
           cat SHA256SUMS
 
       - name: "Upload Firmware Artifacts 📤"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: arduino-uno-firmware
+          name: esp32-firmware
           path: |
-            .pio/build/uno/firmware.hex
-            .pio/build/uno/firmware.elf
-            .pio/build/uno/SHA256SUMS
+            firmware/.pio/build/esp32dev/firmware.bin
+            firmware/.pio/build/esp32dev/firmware.elf
+            firmware/.pio/build/esp32dev/SHA256SUMS
           if-no-files-found: error
           retention-days: 7
 
