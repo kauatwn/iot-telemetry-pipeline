@@ -39,8 +39,11 @@ func (db *InfluxDB) Save(ctx context.Context, p telemetry.Payload) error {
 	point := influxdb3.NewPointWithMeasurement("environment_sensor").
 		SetTag("device_id", p.DeviceID).
 		SetTag("sensor_model", p.Sensor).
-		SetTag("status", p.Status).
 		SetTimestamp(time.Now())
+
+	if p.Temperature != nil {
+		point.SetDoubleField("temperature", *p.Temperature)
+	}
 
 	if p.Unit != "" {
 		point.SetTag("unit", p.Unit)
@@ -50,8 +53,8 @@ func (db *InfluxDB) Save(ctx context.Context, p telemetry.Payload) error {
 		point.SetIntegerField("uptime_ms", p.UptimeMs)
 	}
 
-	if p.HasTemperature() {
-		point.SetDoubleField("temperature", *p.Temperature)
+	if p.Status != "" {
+		point.SetStringField("status", p.Status)
 	}
 
 	if err := db.client.WritePoints(ctx, []*influxdb3.Point{point}); err != nil {
