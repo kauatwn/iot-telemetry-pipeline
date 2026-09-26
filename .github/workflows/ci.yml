@@ -45,6 +45,9 @@ jobs:
       - name: "Install Clang-Format 🔧"
         run: pip install -r requirements.txt
 
+      - name: "Provide Mock Secrets for CI 🔑"
+        run: cp include/secrets.example.h include/secrets.h
+
       - name: "Check Code Formatting (Clang-Format) 🎨"
         run: |
           find src include lib -type f \
@@ -87,6 +90,9 @@ jobs:
       - name: "Install Dependencies 🔧"
         run: pip install -r requirements.txt
 
+      - name: "Provide Mock Secrets for CI 🔑"
+        run: cp include/secrets.example.h include/secrets.h
+
       - name: "Run Static Analysis (Clang-Tidy) 🔍"
         run: pio check --fail-on-defect=low
 
@@ -126,6 +132,9 @@ jobs:
 
       - name: "Install Dependencies 🔧"
         run: pip install -r requirements.txt
+
+      - name: "Provide Mock Secrets for CI 🔑"
+        run: cp include/secrets.example.h include/secrets.h
 
       - name: "Build ESP32 Firmware 🔨"
         run: pio run -e esp32dev
