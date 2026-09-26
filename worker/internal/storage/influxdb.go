@@ -40,7 +40,6 @@ func (db *InfluxDB) Save(ctx context.Context, p telemetry.Payload) error {
 		SetTag("device_id", p.DeviceID).
 		SetTag("sensor_model", p.Sensor).
 		SetTag("status", p.Status).
-		SetStringField("status", p.Status).
 		SetTimestamp(time.Now())
 
 	if p.Unit != "" {
