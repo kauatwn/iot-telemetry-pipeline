@@ -96,7 +96,7 @@ func (b *MQTTBroker) messageHandler() mqtt.MessageHandler {
 			return
 		}
 
-		if !payload.HasTemperature() {
+		if payload.Temperature == nil {
 			slog.Warn("telemetry received without temperature (sensor disconnected)",
 				"device_id", payload.DeviceID,
 				"status", payload.Status,
