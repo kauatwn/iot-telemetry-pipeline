@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "author": "IoT Telemetry Pipeline",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 100,
+      "left": 100,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-ds18b20",
+      "id": "temp_sensor",
+      "top": -20.33,
+      "left": 23.28,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_pullup",
+      "top": 51.95,
+      "left": 86.4,
+      "attrs": { "value": "4700" }
+    }
+  ],
+  "connections": [
+    ["r_pullup:1", "temp_sensor:VCC", "red", ["h-38.4"]],
+    ["r_pullup:2", "temp_sensor:DQ", "yellow", ["v10", "h30"]],
+    ["esp:GND.1", "temp_sensor:GND", "black", ["h0"]],
+    ["esp:3V3", "temp_sensor:VCC", "red", ["h0"]],
+    ["esp:14", "temp_sensor:DQ", "yellow", ["h0"]]
+  ],
+  "dependencies": {}
+}
