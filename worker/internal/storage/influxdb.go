@@ -4,23 +4,19 @@ import (
 	"context"
 	"fmt"
 	"time"
+
 	"worker/internal/config"
 	"worker/internal/telemetry"
 
 	"github.com/InfluxCommunity/influxdb3-go/v2/influxdb3"
 )
 
-// Writer define a interface de persistência de telemetria
-type Writer interface {
-	Save(ctx context.Context, p telemetry.Payload) error
-	Close() error
-}
-
 type InfluxDB struct {
 	client *influxdb3.Client
 }
 
-var _ Writer = (*InfluxDB)(nil)
+// Garante em tempo de compilação que *InfluxDB atende a interface telemetry.Writer
+var _ telemetry.Writer = (*InfluxDB)(nil)
 
 func NewInfluxDB(cfg config.StorageConfig) (*InfluxDB, error) {
 	client, err := influxdb3.New(influxdb3.ClientConfig{
@@ -44,19 +40,15 @@ func (db *InfluxDB) Save(ctx context.Context, p telemetry.Payload) error {
 	if p.Temperature != nil {
 		point.SetDoubleField("temperature", *p.Temperature)
 	}
-
 	if p.Unit != "" {
 		point.SetTag("unit", p.Unit)
 	}
-
 	if p.UptimeMs > 0 {
 		point.SetIntegerField("uptime_ms", p.UptimeMs)
 	}
-
 	if p.Status != "" {
 		point.SetStringField("status", p.Status)
 	}
-
 	if err := db.client.WritePoints(ctx, []*influxdb3.Point{point}); err != nil {
 		return fmt.Errorf("write telemetry point: %w", err)
 	}
@@ -68,5 +60,6 @@ func (db *InfluxDB) Close() error {
 	if err := db.client.Close(); err != nil {
 		return fmt.Errorf("close influxdb client: %w", err)
 	}
+
 	return nil
 }
