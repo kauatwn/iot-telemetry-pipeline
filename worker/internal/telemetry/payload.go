@@ -8,3 +8,8 @@ type Payload struct {
 	UptimeMs    int64    `json:"uptime_ms"`
 	Status      string   `json:"status"`
 }
+
+// IsDisconnected verifica se a leitura indica que o sensor de hardware está desconectado.
+func (p Payload) IsDisconnected() bool {
+	return p.Temperature == nil || p.Status == "DISCONNECTED"
+}
