@@ -43,12 +43,12 @@ void setup_wifi() {
   WiFi.begin(wifi_ssid, wifi_password);
 
   const unsigned long start_attempt_time = millis();
-  while (WiFiClass::status() != WL_CONNECTED && millis() - start_attempt_time < wifi_connect_timeout_ms) {
+  while (WiFi.status() != WL_CONNECTED && millis() - start_attempt_time < wifi_connect_timeout_ms) {
     delay(250);
     Serial.print('.');
   }
 
-  if (WiFiClass::status() == WL_CONNECTED) {
+  if (WiFi.status() == WL_CONNECTED) {
     Serial.println();
     Serial.print(F("[WIFI] Connected successfully! IP Address: "));
     Serial.println(WiFi.localIP());
@@ -59,7 +59,7 @@ void setup_wifi() {
 }
 
 void maintain_wifi_connection(const unsigned long current_ms) {
-  if (WiFiClass::status() == WL_CONNECTED) {
+  if (WiFi.status() == WL_CONNECTED) {
     return;
   }
 
@@ -91,12 +91,11 @@ bool connect_to_mqtt() {
 }
 
 void maintain_mqtt_connection(const unsigned long current_ms) {
-  if (WiFiClass::status() != WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED) {
     return;
   }
 
-  auto& mqtt_client = get_mqtt_client();
-  if (mqtt_client.connected()) {
+  if (auto& mqtt_client = get_mqtt_client(); mqtt_client.connected()) {
     return;
   }
 
