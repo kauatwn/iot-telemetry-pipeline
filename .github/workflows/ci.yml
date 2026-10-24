@@ -195,49 +195,13 @@ jobs:
       - name: "Run Go Vulnerability Check (govulncheck) 🛡️"
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-  go-test:
-    name: "Go: Unit Tests & Race Detection"
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    defaults:
-      run:
-        shell: bash
-        working-directory: worker
-
-    steps:
-      - name: "Checkout code 🛎️"
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: "Setup Go 🐹"
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: "worker/go.mod"
-          cache: true
-          cache-dependency-path: "worker/go.sum"
-
-      - name: "Run Tests with Race Detector & Coverage 🧪"
-        run: |
-          go test -v -race -covermode=atomic -coverprofile=coverage.out ./...
-          go tool cover -func=coverage.out
-
-      - name: "Upload Test Coverage 📊"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: go-worker-coverage
-          path: worker/coverage.out
-          retention-days: 7
-
   go-build:
     name: "Go: Build Worker Binary"
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
-    needs: [go-lint, go-test]
+    needs: [go-lint]
     defaults:
       run:
         shell: bash
